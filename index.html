@@ -68,6 +68,16 @@
   .lock-tag{font-size:9px;letter-spacing:.1em;font-weight:700;text-transform:uppercase;color:#11141a;background:var(--steel);padding:2px 6px;border-radius:4px;}
   .lock-note{margin-top:14px;font-size:12.5px;color:var(--bone-dim);background:rgba(138,147,162,.1);border:1px solid var(--line);border-radius:9px;padding:10px 12px;line-height:1.5;}
   .pair-hint{font-size:12px;color:var(--steel);margin:-2px 2px 12px;line-height:1.5;}
+  .pairing[hidden]{display:none;}
+  .lock-toggle{background:var(--bg-2);border:1px solid var(--line);color:var(--bone-dim);font-family:inherit;
+    font-size:12px;font-weight:600;padding:7px 13px;border-radius:999px;cursor:pointer;margin:-2px 0 12px;transition:.14s;}
+  .lock-toggle[aria-pressed="true"]{border-color:var(--steel);color:var(--bone);}
+  .lock-toggle[hidden]{display:none;}
+  .syn-extra{display:none;flex-direction:column;gap:7px;margin-top:7px;}
+  .syn-extra.open{display:flex;}
+  .syn-toggle{background:none;border:none;color:var(--gold);font-family:inherit;font-size:11.5px;font-weight:600;
+    cursor:pointer;padding:7px 2px 0;text-align:left;}
+  .syn-toggle:hover{color:var(--gold-bright);}
   .count{font-size:12px;color:var(--steel);letter-spacing:.05em;margin:4px 2px 12px;text-transform:uppercase;font-weight:600;}
   .grid{display:flex;flex-direction:column;gap:11px;}
   .card{position:relative;display:flex;gap:13px;align-items:flex-start;background:linear-gradient(180deg,var(--panel),var(--bg-2));
@@ -173,6 +183,7 @@
     <label class="psel"><span>Secondary</span><select id="secSel" aria-label="Secondary profession"></select></label>
   </div>
   <div class="pair-hint" id="pairHint" hidden></div>
+  <button class="lock-toggle" id="lockToggle" aria-pressed="false" hidden></button>
   <div class="filters">
     <div class="chip-row" id="profRow" role="group" aria-label="Filter by profession"></div>
     <div class="chip-row" id="typeRow" role="group" aria-label="Filter by type"></div>
@@ -247,7 +258,7 @@ SKILLS.forEach((s,i)=>{
 });
 
 const BATCH=80;
-const state={q:"",prof:new Set(),type:new Set(),elite:false,shown:BATCH,mode:"browse",primary:"W",secondary:""};
+const state={q:"",prof:new Set(),type:new Set(),elite:false,shown:BATCH,mode:"browse",primary:"W",secondary:"",showLocked:false};
 const $=s=>document.querySelector(s);
 const grid=$("#grid"),countEl=$("#count"),moreBtn=$("#moreBtn");
 
@@ -284,23 +295,29 @@ function locked(s){ return state.mode==="pair" && state.secondary && s.p===state
 function availForSynergy(o){ return state.mode!=="pair" ? true : (inPair(o) && !locked(o)); }
 
 const selProfs=PROF_ORDER.filter(p=>profPresent.has(p)&&p!=="X");
-const primSel=$("#primSel"),secSel=$("#secSel"),pairing=$("#pairing"),pairHint=$("#pairHint");
+const primSel=$("#primSel"),secSel=$("#secSel"),pairing=$("#pairing"),pairHint=$("#pairHint"),lockToggle=$("#lockToggle");
 selProfs.forEach(p=>primSel.add(new Option(pn(p),p)));
 secSel.add(new Option("\u2014 none \u2014",""));
 selProfs.forEach(p=>secSel.add(new Option(pn(p),p)));
 primSel.value=state.primary;secSel.value=state.secondary;
+function lockedCount(){ return state.secondary ? SKILLS.filter(s=>s.p===state.secondary&&s.pa===1).length : 0; }
 function syncSel(){
   primSel.style.setProperty("--c",pc(primSel.value));
   secSel.style.setProperty("--c",secSel.value?pc(secSel.value):"var(--line)");
+  const lc=lockedCount();
   if(state.mode==="pair"){
     pairHint.hidden=false;
     pairHint.textContent=state.secondary
-      ? `Showing the ${pn(state.primary)} / ${pn(state.secondary)} skill pool. Greyed skills need ${pn(state.secondary)}'s primary attribute, which a secondary can't use.`
+      ? `Showing the ${pn(state.primary)} / ${pn(state.secondary)} skill pool.`
       : `Showing every ${pn(state.primary)} skill plus profession-neutral skills. Pick a secondary to widen the pool.`;
-  } else pairHint.hidden=true;
+    lockToggle.hidden = !(state.secondary && lc>0);
+    lockToggle.setAttribute("aria-pressed",state.showLocked);
+    lockToggle.textContent = state.showLocked ? `Hide ${lc} locked` : `Show ${lc} locked`;
+  } else { pairHint.hidden=true; lockToggle.hidden=true; }
 }
 primSel.onchange=()=>{state.primary=primSel.value;if(state.secondary===state.primary){state.secondary="";secSel.value="";}syncSel();reset();};
 secSel.onchange=()=>{state.secondary=secSel.value;if(state.secondary===state.primary){state.secondary="";secSel.value="";}syncSel();reset();};
+lockToggle.onclick=()=>{state.showLocked=!state.showLocked;syncSel();reset();};
 
 const mBrowse=$("#mBrowse"),mPair=$("#mPair");
 function setMode(m){
@@ -323,6 +340,7 @@ moreBtn.onclick=()=>{state.shown+=BATCH;render();};
 function match(s){
   if(state.mode==="pair"){
     if(!inPair(s))return false;
+    if(locked(s)&&!state.showLocked)return false;
   } else if(state.prof.size&&!state.prof.has(s.p))return false;
   if(state.type.size&&!state.type.has(typeGroup(s.t)))return false;
   if(state.elite&&!s.elite)return false;
@@ -398,6 +416,11 @@ function detailPips(s){
   o+=tpip('recharge',s.r===0?"\u2014":s.r+"s");
   return o;
 }
+function synRow(j){const o=SKILLS[j];
+  return `<button class="syn-row" style="--c2:${pc(o.p)}" data-i="${j}">
+    <span class="syn-ic" style="${iconBg(o,30)||''}"></span>
+    <span><span class="sn">${o.n}</span><span class="why">${pn(o.p)} &middot; ${o.t}</span></span>
+    <span class="arrow">&#8250;</span></button>`;}
 function openSheet(i){
   const s=SKILLS[i],c=pc(s.p);
   const tagHTML=[...s.applies.map(t=>`<span class="tag applies">applies ${t}</span>`),
@@ -405,17 +428,13 @@ function openSheet(i){
   const groups=synGroups(i);
   let synHTML;
   if(groups.length){
-    synHTML=groups.map(g=>{
-      const cap=g.ids.slice(0,6),extra=g.ids.length-cap.length;
-      const rows=cap.map(j=>{const o=SKILLS[j];
-        return `<button class="syn-row" style="--c2:${pc(o.p)}" data-i="${j}">
-          <span class="syn-ic" style="${iconBg(o,30)||''}"></span>
-          <span><span class="sn">${o.n}</span><span class="why">${pn(o.p)} &middot; ${o.t}</span></span>
-          <span class="arrow">&#8250;</span></button>`;}).join("");
+    synHTML=groups.map((g,gi)=>{
+      const rows=g.ids.slice(0,6).map(synRow).join("");
+      const extra=g.ids.length-6;
       return `<div class="syn-group">
         <div class="syn-label">${g.label}<span class="ct">${g.ids.length} skill${g.ids.length!==1?'s':''}</span></div>
         <div class="syn">${rows}</div>
-        ${extra>0?`<div class="syn-more">+${extra} more ${g.tag} skill${extra!==1?'s':''}</div>`:''}</div>`;
+        ${extra>0?`<div class="syn-extra" id="se${gi}"></div><button class="syn-toggle" data-g="${gi}">+${extra} more ${g.tag} skill${extra!==1?'s':''}</button>`:''}</div>`;
     }).join("");
   } else {
     synHTML=`<div class="syn-none">No tagged synergies for this skill yet &mdash; curated combos will fill these gaps over time.</div>`;
@@ -434,6 +453,18 @@ function openSheet(i){
     ${tagHTML?`<div class="tags">${tagHTML}</div>`:''}
     <div class="syn-head">Synergizes with</div>
     ${synHTML}`;
+  sheet.querySelectorAll(".syn-toggle").forEach(btn=>{
+    btn.onclick=()=>{
+      const gi=+btn.dataset.g, g=groups[gi], cont=sheet.querySelector("#se"+gi);
+      if(!cont.dataset.built){
+        cont.innerHTML=g.ids.slice(6).map(synRow).join("");
+        cont.querySelectorAll(".syn-row").forEach(r=>r.onclick=()=>openSheet(+r.dataset.i));
+        cont.dataset.built="1";
+      }
+      const open=cont.classList.toggle("open");
+      btn.textContent=open?"Show fewer":`+${g.ids.length-6} more ${g.tag} skill${g.ids.length-6!==1?'s':''}`;
+    };
+  });
   sheet.querySelector("#closeX").onclick=closeSheet;
   sheet.querySelectorAll(".syn-row").forEach(r=>r.onclick=()=>openSheet(+r.dataset.i));
   sheet.scrollTop=0;
