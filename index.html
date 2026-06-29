@@ -161,6 +161,28 @@
   .suggest-banner{font-size:12.5px;color:var(--bone-dim);background:rgba(201,163,91,.08);border:1px solid var(--line);
     border-left:3px solid var(--gold);border-radius:9px;padding:11px 13px;margin-bottom:14px;line-height:1.5;}
   .card-wrap .card{padding-right:52px;}
+  .discover{padding:2px 0 4px;}
+  .disc-intro{font-size:12px;color:var(--bone-dim);line-height:1.5;margin-bottom:12px;}
+  .gen-btn{width:100%;padding:13px;border-radius:11px;border:1px solid var(--gold);cursor:pointer;
+    background:linear-gradient(180deg,rgba(201,163,91,.22),rgba(201,163,91,.10));color:var(--gold-bright);
+    font-family:inherit;font-weight:600;font-size:14px;letter-spacing:.5px;}
+  .gen-btn:active{transform:translateY(1px);}
+  .gen-btn[disabled]{opacity:.55;cursor:default;}
+  .disc-status{font-size:12px;color:var(--steel);text-align:center;margin-top:10px;min-height:16px;}
+  .build{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px;margin-top:13px;}
+  .build-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap;}
+  .build-attrs{display:flex;gap:5px;flex-wrap:wrap;}
+  .build-attr{font-size:10.5px;padding:2px 7px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--bone-dim);}
+  .build-score{margin-left:auto;font-size:11px;color:var(--gold);font-weight:600;}
+  .build-icons{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;}
+  .build-icons .gi{width:42px;height:42px;border-radius:8px;border:1.5px solid var(--c,#555);background-size:cover;position:relative;cursor:pointer;}
+  .build-icons .gi.el{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;}
+  .build-why{font-size:11.5px;color:var(--bone);line-height:1.5;margin-bottom:10px;}
+  .build-why b{color:var(--gold-bright);font-weight:600;}
+  .build-roles{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px;}
+  .build-load{width:100%;padding:9px;border-radius:9px;border:1px solid var(--line);background:var(--bg);
+    color:var(--bone);font-family:inherit;font-size:12.5px;cursor:pointer;}
+  .build-load:active{transform:translateY(1px);}
   .add-btn{position:absolute;top:50%;right:10px;transform:translateY(-50%);width:30px;height:30px;border-radius:8px;
     border:1px solid var(--line);background:var(--bg);color:var(--bone-dim);font-size:19px;line-height:1;cursor:pointer;
     display:grid;place-items:center;transition:.14s;z-index:3;font-family:inherit;}
@@ -224,6 +246,7 @@
     <button id="mBrowse" class="mode-btn" role="tab" aria-selected="true">Browse</button>
     <button id="mPair" class="mode-btn" role="tab" aria-selected="false">Pairing</button>
     <button id="mSuggest" class="mode-btn" role="tab" aria-selected="false">Suggest</button>
+    <button id="mDiscover" class="mode-btn" role="tab" aria-selected="false">Discover</button>
   </div>
   <div class="pairing" id="pairing" hidden>
     <label class="psel"><span>Primary</span><select id="primSel" aria-label="Primary profession"></select></label>
@@ -231,6 +254,12 @@
     <label class="psel"><span>Secondary</span><select id="secSel" aria-label="Secondary profession"></select></label>
   </div>
   <div class="pair-hint" id="pairHint" hidden></div>
+  <div class="discover" id="discoverPanel" hidden>
+    <div class="disc-intro">Searches whole legal bars for your professions and ranks them by how well they hang together &mdash; chains, self-feeding loops, role coverage, and attribute focus. Leave Secondary blank to let it explore every pairing. Skills already on your bar are kept as anchors.</div>
+    <button class="gen-btn" id="genBtn">Generate builds</button>
+    <div class="disc-status" id="discStatus"></div>
+    <div id="buildResults"></div>
+  </div>
   <button class="lock-toggle" id="lockToggle" aria-pressed="false" hidden></button>
   <div class="filters">
     <div class="chip-row" id="profRow" role="group" aria-label="Filter by profession"></div>
@@ -377,19 +406,29 @@ primSel.onchange=()=>{state.primary=primSel.value;if(state.secondary===state.pri
 secSel.onchange=()=>{state.secondary=secSel.value;if(state.secondary===state.primary){state.secondary="";secSel.value="";}syncSel();reset();};
 lockToggle.onclick=()=>{state.showLocked=!state.showLocked;syncSel();reset();};
 
-const mBrowse=$("#mBrowse"),mPair=$("#mPair"),mSuggest=$("#mSuggest");
+const mBrowse=$("#mBrowse"),mPair=$("#mPair"),mSuggest=$("#mSuggest"),mDiscover=$("#mDiscover");
+const discoverPanel=$("#discoverPanel");
 function setMode(m){
   state.mode=m;
   mBrowse.setAttribute("aria-selected",m==="browse");
   mPair.setAttribute("aria-selected",m==="pair");
   mSuggest.setAttribute("aria-selected",m==="suggest");
-  pairing.hidden=m!=="pair";
-  profRow.style.display=(m==="pair")?"none":"";
-  syncSel();reset();
+  mDiscover.setAttribute("aria-selected",m==="discover");
+  const disc=m==="discover";
+  pairing.hidden=!(m==="pair"||disc);          // selectors shown in Pairing and Discover
+  discoverPanel.hidden=!disc;
+  profRow.style.display=(m==="pair"||disc)?"none":"";
+  $("#typeRow").style.display=disc?"none":"";
+  $("#grid").style.display=disc?"none":"";
+  $("#count").style.display=disc?"none":"";
+  if(disc) moreBtn.style.display="none";
+  syncSel();
+  if(!disc) reset(); else render();
 }
 mBrowse.onclick=()=>setMode("browse");
 mPair.onclick=()=>setMode("pair");
 mSuggest.onclick=()=>setMode("suggest");
+mDiscover.onclick=()=>setMode("discover");
 syncSel();
 
 const qEl=$("#q"),clearBtn=$("#clear");
@@ -439,6 +478,7 @@ function bindGrid(){
   grid.querySelectorAll(".add-btn").forEach(b=>b.onclick=()=>toggleBar(+b.dataset.i));
 }
 function render(){
+  if(state.mode==="discover")return;
   if(state.mode==="suggest")return renderSuggest();
   const list=SKILLS.filter(match);
   countEl.textContent=list.length+" skill"+(list.length!==1?"s":"");
@@ -729,6 +769,179 @@ $("#dockClear").onclick=()=>{ if(state.bar.length){ state.bar=[]; dockSummary.cl
 function saveBar(){try{localStorage.setItem("gw_bar",JSON.stringify(state.bar.map(i=>SKILLS[i].id)));}catch(e){}}
 function loadBar(){try{const r=localStorage.getItem("gw_bar");if(r){const byId={};SKILLS.forEach(s=>byId[s.id]=s._i);
   state.bar=JSON.parse(r).map(id=>byId[id]).filter(x=>x!=null).slice(0,8);}}catch(e){}}
+
+// ===== Discovery engine (whole-bar search) =====
+const ENG=(function(){
+  const TF={}; SKILLS.forEach(s=>[...s.applies,...s.exploits].forEach(t=>TF[t]=(TF[t]||0)+1));
+  const tagW=t=>1/Math.log2(2+(TF[t]||0));
+  const RG={Damage:"Damage",AoE:"Damage",Heal:"Sustain","Self-heal":"Sustain",Protection:"Protection",
+    Defense:"Defense","Condition removal":"Cleanse","Hex removal":"HexRem",Energy:"Energy",
+    Interrupt:"Shutdown",Control:"Control","Cond pressure":"Pressure",Buff:"Support",Rez:"Rez",Summon:"Summon"};
+  const GP={Sustain:1.0,Cleanse:.9,Energy:.85,Rez:.7,Protection:.55,HexRem:.5,Support:.5,Control:.5,
+    Shutdown:.45,Defense:.45,Damage:.6,Pressure:.4,Summon:.4};
+  const GLAB={Sustain:"sustain",Cleanse:"condition removal",Energy:"energy",Rez:"rez",Protection:"protection",
+    HexRem:"hex removal",Support:"support",Control:"control",Shutdown:"interrupt",Defense:"defense",
+    Damage:"damage",Pressure:"pressure",Summon:"summon"};
+  const MARTIAL=new Set(["Swordsmanship","Axe Mastery","Hammer Mastery","Marksmanship","Dagger Mastery",
+    "Scythe Mastery","Spear Mastery","Expertise","Critical Strikes"]);
+  const isTitle=a=>/Title Track$/.test(a);
+  const grp=SKILLS.map(s=>[...new Set((s.roles||[]).map(r=>RG[r]).filter(Boolean))]);
+  const ap=SKILLS.map(s=>new Set(s.applies)), ex=SKILLS.map(s=>new Set(s.exploits));
+  const pointAttr=SKILLS.map(s=>(s.a!=="No Attribute"&&!isTitle(s.a))?s.a:null);
+  const isAttack=SKILLS.map(s=>/Attack/.test(s.t));
+  const dead=SKILLS.map((s,i)=>grp[i].length===0&&s.applies.length===0&&s.exploits.length===0);
+  const isTitleSkill=SKILLS.map(s=>isTitle(s.a));
+  const baseName=SKILLS.map(s=>s.n.replace(/ \((Kurzick|Luxon)\)$/,""));
+  const byA={},byE={}; SKILLS.forEach((s,i)=>{s.applies.forEach(t=>(byA[t]=byA[t]||[]).push(i));s.exploits.forEach(t=>(byE[t]=byE[t]||[]).push(i));});
+  const adj=SKILLS.map(()=>new Map());
+  Object.keys(byA).forEach(t=>{const w=tagW(t),A=byA[t],B=byE[t]||[];A.forEach(x=>{const m=adj[x];B.forEach(y=>{if(x!==y)m.set(y,(m.get(y)||0)+w);});});});
+  SKILLS.forEach((s,x)=>{if(grp[x].includes("Energy")){const m=adj[x];SKILLS.forEach((t,y)=>{if(x!==y&&(t.e||0)>=10)m.set(y,(m.get(y)||0)+0.25);});}});
+  const edge=(x,y)=>adj[x].get(y)||0;
+  const profsOf=ids=>{const ps=[];ids.forEach(i=>{const p=SKILLS[i].p;if(p!=="X"&&!ps.includes(p))ps.push(p);});return ps;};
+  function legalAdd(ids,c){const sc=SKILLS[c];
+    if(ids.includes(c)||ids.length>=8)return false;
+    if(ids.some(i=>baseName[i]===baseName[c]))return false;
+    if(sc.elite&&ids.some(i=>SKILLS[i].elite))return false;
+    if(sc.p!=="X"){const ps=profsOf(ids);let sec=ps.length>1?ps[1]:null;
+      if(!ps.includes(sc.p)){if(ps.length>=2)return false;if(ps.length===1)sec=sc.p;}
+      if(sec&&sc.p===sec&&sc.pa===1)return false;}
+    return true;}
+  function fitness(ids){const n=ids.length;if(!n)return 0;
+    let chain=0;const inn=new Set(),out=new Set();
+    for(let a=0;a<n;a++)for(let b=0;b<n;b++){if(a===b)continue;const w=edge(ids[a],ids[b]);if(w>0){chain+=w;out.add(ids[a]);inn.add(ids[b]);}}
+    let loops=0;const conn=new Set();ids.forEach(i=>{if(inn.has(i)&&out.has(i))loops++;if(inn.has(i)||out.has(i))conn.add(i);});
+    const engine=0.4*(1-Math.exp(-0.9*chain))+0.25*(loops/n)+0.35*(conn.size/n);
+    const G=new Set();ids.forEach(i=>grp[i].forEach(g=>G.add(g)));
+    let cov=0;G.forEach(g=>cov+=(GP[g]||0.3));cov=Math.min(1,cov/2.6);
+    if(!G.has("Damage"))cov*=0.4;if(!G.has("Sustain"))cov*=0.7;
+    const at=new Set();ids.forEach(i=>{const a=pointAttr[i];if(a)at.add(a);});
+    const na=at.size;const attr=na<=2?1.0:na===3?0.78:na===4?0.38:0.15;
+    let spend=0;ids.forEach(i=>spend+=(SKILLS[i].adr>0?2:(SKILLS[i].e||0)));
+    const avg=spend/n;let energy=Math.max(0,Math.min(1,1-(avg-4)/14));if(G.has("Energy"))energy=Math.min(1,energy+0.2);
+    let sim=0,pairs=0;
+    for(let a=0;a<n;a++)for(let b=a+1;b<n;b++){const i=ids[a],j=ids[b];let s=0;
+      if(pointAttr[i]&&pointAttr[i]===pointAttr[j])s+=0.4;
+      if(grp[i].some(g=>grp[j].includes(g)))s+=0.3;
+      const inter=[...ap[i]].filter(t=>ap[j].has(t)).length;if(inter)s+=0.3*Math.min(1,inter/2);
+      sim+=s;pairs++;}
+    const redund=pairs?sim/pairs:0;
+    const isMartial=ids.some(i=>MARTIAL.has(pointAttr[i]));
+    let orphan=0,deadN=0,titles=0;
+    ids.forEach(i=>{if(isAttack[i]&&!isMartial)orphan++;if(dead[i])deadN++;if(isTitleSkill[i])titles++;});
+    const titlePen=Math.max(0,titles-2)/n;
+    const W={eng:.34,role:.28,attr:.23,energy:.15,redund:.20,orphan:.5,dead:.3,title:.6};
+    return W.eng*engine+W.role*cov+W.attr*attr+W.energy*energy-W.redund*redund-W.orphan*(orphan/n)-W.dead*(deadN/n)-W.title*titlePen;}
+  function pick(cs,T){cs.sort((a,b)=>b.g-a.g);const top=cs.slice(0,T);const mn=Math.min(...top.map(x=>x.g));
+    const ws=top.map(x=>Math.exp(2.5*(x.g-mn)));let r=Math.random()*ws.reduce((a,b)=>a+b,0);
+    for(let k=0;k<top.length;k++){r-=ws[k];if(r<=0)return top[k].c;}return top[0].c;}
+  function construct(pool,fixed,T){let ids=fixed.slice();
+    while(ids.length<8){const base=fitness(ids);const cs=[];
+      for(const c of pool){if(legalAdd(ids,c))cs.push({c,g:fitness(ids.concat(c))-base});}
+      if(!cs.length)break;ids.push(pick(cs,T));}
+    return ids;}
+  function hill(ids,pool,fixed,passes){let cur=ids.slice(),curF=fitness(cur);
+    for(let p=0;p<passes;p++){let imp=false;
+      for(let slot=0;slot<cur.length;slot++){if(fixed.includes(cur[slot]))continue;
+        let bC=cur[slot],bF=curF;const rest=cur.filter((_,k)=>k!==slot);
+        for(const c of pool){if(c===cur[slot]||rest.includes(c))continue;if(!legalAdd(rest,c))continue;
+          const f=fitness(rest.concat(c));if(f>bF){bF=f;bC=c;}}
+        if(bC!==cur[slot]){cur[slot]=bC;curF=bF;imp=true;}}
+      if(!imp)break;}
+    return{ids:cur.slice().sort((a,b)=>a-b),f:curF};}
+  function search(pools,fixed,restarts,passes,T){const found=new Map();
+    for(const pool of pools)for(let r=0;r<restarts;r++){const b=construct(pool,fixed,T);if(b.length<6)continue;
+      const o=hill(b,pool,fixed,passes);const k=o.ids.join(",");if(!found.has(k)||found.get(k).f<o.f)found.set(k,o);}
+    return[...found.values()].sort((a,b)=>b.f-a.f);}
+  function diversify(builds,K){if(!builds.length)return[];const sel=[builds[0]];
+    const jac=(a,b)=>{const A=new Set(a.ids),B=new Set(b.ids);let in_=0;A.forEach(x=>{if(B.has(x))in_++;});return in_/(A.size+B.size-in_);};
+    while(sel.length<K&&sel.length<builds.length){let best=null,bs=-1e9;
+      for(const b of builds){if(sel.includes(b))continue;const mmr=b.f-0.8*Math.max(...sel.map(s=>jac(b,s)));if(mmr>bs){bs=mmr;best=b;}}
+      if(!best)break;sel.push(best);}
+    return sel;}
+  const prune=ids=>ids.filter(i=>!dead[i]);
+  // top synergy edges + gaps, for the "why it works" blurb
+  function explain(ids){const edges=[];
+    for(const x of ids)for(const y of ids){if(x===y)continue;const w=edge(x,y);if(w>0.18)edges.push({x,y,w});}
+    edges.sort((a,b)=>b.w-a.w);
+    const seen=new Set(),lines=[];
+    for(const e of edges){const key=ap[e.x].size?[...ap[e.x]].filter(t=>ex[e.y].has(t))[0]:null;
+      const sig=e.x+">"+e.y;if(seen.has(sig))continue;seen.add(sig);
+      if(key)lines.push(`<b>${SKILLS[e.x].n}</b> sets up ${key} for <b>${SKILLS[e.y].n}</b>`);
+      else lines.push(`<b>${SKILLS[e.x].n}</b> fuels <b>${SKILLS[e.y].n}</b>`);
+      if(lines.length>=2)break;}
+    const G=new Set();ids.forEach(i=>grp[i].forEach(g=>G.add(g)));
+    const covered=[...G].map(g=>GLAB[g]).filter(Boolean);
+    return {lines,covered,groups:G};}
+  return {search,diversify,prune,fitness,explain,GLAB,pointAttr,isTitleSkill};
+})();
+
+// ----- Discover mode handlers -----
+const genBtn=$("#genBtn"),discStatus=$("#discStatus"),buildResults=$("#buildResults");
+const DISC_PROFS=["W","R","Mo","N","Me","E","A","Rt","P","D"];
+function poolFor(primary,sec){
+  return ENG.prune(SKILLS.filter(s=>s.p===primary||s.p==="X"||(sec&&s.p===sec))
+    .filter(s=>!(sec&&s.p===sec&&s.pa===1)).map(s=>s._i));
+}
+function generateBuilds(){
+  const primary=state.primary;
+  const fixed=state.bar.slice();
+  // professions implied by anchored skills constrain the search
+  const anchorProfs=[...new Set(fixed.map(i=>SKILLS[i].p).filter(p=>p!=="X"))];
+  let primaryEff=primary, secEff=state.secondary;
+  if(anchorProfs.length){ primaryEff=anchorProfs[0]; if(anchorProfs[1]) secEff=anchorProfs[1]; }
+  let pools, sweeping=false;
+  if(secEff){ pools=[poolFor(primaryEff,secEff)]; }
+  else { sweeping=true; pools=[poolFor(primaryEff,null)]
+        .concat(DISC_PROFS.filter(p=>p!==primaryEff).map(p=>poolFor(primaryEff,p))); }
+  const restarts = sweeping?6:18;
+  const all=ENG.search(pools,fixed,restarts,3,10);
+  const div=ENG.diversify(all,6);
+  renderBuilds(div,{sweeping,primaryEff,secEff,n:all.length});
+}
+function buildIconsHTML(ids){
+  return `<div class="build-icons">`+ids.map(i=>{const s=SKILLS[i];const bg=iconBg(s,42);
+    return bg
+      ? `<span class="gi ${s.elite?'el':''}" style="--c:${pc(s.p)};${bg}" data-i="${i}" title="${s.n}"></span>`
+      : `<span class="gi letter ${s.elite?'el':''}" style="--c:${pc(s.p)};display:flex;align-items:center;justify-content:center;color:var(--bone);font-weight:700;" data-i="${i}" title="${s.n}">${s.n[0]}</span>`;
+  }).join("")+`</div>`;
+}
+function renderBuilds(builds,meta){
+  if(!builds.length){ buildResults.innerHTML=`<div class="empty"><div class="big">No buildable bars found</div>Try a different profession or clear some bar anchors.</div>`; return; }
+  const PVE=[["Damage","damage"],["Sustain","sustain"],["Cleanse","condition removal"],["Energy","energy"],["Rez","rez"]];
+  buildResults.innerHTML=builds.map((b,n)=>{
+    const ex=ENG.explain(b.ids);
+    const at={}; b.ids.forEach(i=>{const a=ENG.pointAttr[i]; if(a)at[a]=(at[a]||0)+1;});
+    const attrTags=Object.keys(at).map(a=>`<span class="build-attr">${a}</span>`).join("")||`<span class="build-attr">flexible</span>`;
+    const why = ex.lines.length ? ex.lines.join(" &middot; ") : "A coverage-balanced bar with no standout combo \u2014 a flexible generalist.";
+    const roleChips = PVE.map(([g,lab])=> ex.groups.has(g)
+        ? `<span class="rolechip">${lab}</span>` : `<span class="rolechip gap">no ${lab}</span>`).join("");
+    return `<div class="build">
+      <div class="build-head"><div class="build-attrs">${attrTags}</div><span class="build-score">#${n+1}</span></div>
+      ${buildIconsHTML(b.ids)}
+      <div class="build-why">${why}</div>
+      <div class="build-roles">${roleChips}</div>
+      <button class="build-load" data-ids="${b.ids.join(',')}">Load to skill bar</button>
+    </div>`;
+  }).join("");
+  const head = meta.sweeping
+    ? `${meta.n} bars explored across all ${pn(meta.primaryEff)} pairings \u2014 6 most distinct shown.`
+    : `${meta.n} bars explored for ${pn(meta.primaryEff)}${meta.secEff?(" / "+pn(meta.secEff)):""} \u2014 6 most distinct shown.`;
+  discStatus.textContent=head;
+  buildResults.querySelectorAll(".gi").forEach(g=>g.onclick=()=>openSheet(+g.dataset.i));
+  buildResults.querySelectorAll(".build-load").forEach(btn=>btn.onclick=()=>{
+    const ids=btn.dataset.ids.split(",").map(Number);
+    state.bar=ids.slice(0,8);
+    const profs=[...new Set(ids.map(i=>SKILLS[i].p).filter(p=>p!=="X"))];
+    if(profs[0]){state.primary=profs[0];primSel.value=profs[0];}
+    state.secondary=profs[1]||""; secSel.value=state.secondary;
+    saveBar(); renderDock(); dockSummary.classList.add("open");
+    btn.textContent="Loaded \u2713  \u2014 open the bar below"; btn.disabled=true;
+  });
+}
+genBtn.onclick=()=>{
+  genBtn.disabled=true; discStatus.textContent="Searching the build space\u2026"; buildResults.innerHTML="";
+  setTimeout(()=>{ try{ generateBuilds(); } finally { genBtn.disabled=false; genBtn.textContent="Regenerate"; } }, 30);
+};
 
 loadBar();
 $("#footStat").textContent=`${SKILLS.length} skills · ${SKILLS.filter(s=>s.elite).length} elite · 10 professions`;
