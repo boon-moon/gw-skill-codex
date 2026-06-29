@@ -489,7 +489,7 @@ function renderSuggest(){
 function synGroups(i){
   const s=SKILLS[i],groups=[];
   const build=(tag,ids,label)=>{
-    ids=ids.filter(j=>j!==i && availForSynergy(SKILLS[j]));
+    ids=ids.filter(j=>j!==i && availForSynergy(SKILLS[j]) && !(s.elite && SKILLS[j].elite));
     if(!ids.length)return;
     ids.sort((a,b)=>{
       const A=SKILLS[a],B=SKILLS[b];
